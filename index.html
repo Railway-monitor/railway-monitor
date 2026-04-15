@@ -6,77 +6,84 @@
     <title>RAIL-WATCHER 实时追踪</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background: #0f172a; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: #0f172a; font-family: system-ui, sans-serif; }
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        /* 修复重叠的关键：下拉框阴影和层级 */
+        .search-results { z-index: 100; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); }
     </style>
 </head>
 <body class="text-slate-100 min-h-screen p-4 md:p-8">
 
     <div class="max-w-xl mx-auto space-y-6">
         <header class="flex justify-between items-center">
-            <h1 class="text-2xl font-black text-emerald-400 tracking-tighter">RAIL-WATCHER</h1>
-            <span class="text-xs bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full animate-pulse">● 实时链路已连接</span>
+            <h1 class="text-2xl font-black text-emerald-400 tracking-tighter italic">RAIL-WATCHER</h1>
+            <div class="flex items-center gap-2">
+                <span id="net-status" class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">● 链路正常</span>
+            </div>
         </header>
 
-        <div class="glass rounded-3xl p-6 shadow-2xl">
-            <label class="block text-sm text-slate-400 mb-2 ml-1">选择出发站</label>
+        <div class="glass rounded-3xl p-6 relative">
+            <div class="flex gap-2 mb-4">
+                <button class="flex-1 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">车次查询</button>
+                <button class="flex-1 py-2 rounded-xl bg-slate-800 text-slate-500 text-xs font-bold">站站查询</button>
+            </div>
+            
             <div class="relative">
-                <input type="text" id="station-search" 
-                       oninput="searchStation()"
-                       placeholder="输入拼音或汉字 (如: bjn)" 
-                       class="w-full bg-slate-900/50 border border-slate-700 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                <input type="text" id="main-search" oninput="searchStation()"
+                       placeholder="输入车次或车站 (如 G102 / bjn)" 
+                       class="w-full bg-slate-900/80 border border-slate-700 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-lg font-bold">
                 
-                <div id="results" class="absolute w-full mt-2 bg-slate-800 rounded-2xl shadow-2xl overflow-hidden hidden z-50 border border-slate-700">
-                </div>
+                <div id="results" class="search-results absolute w-full mt-1 bg-slate-800 rounded-2xl overflow-hidden hidden border border-slate-700"></div>
             </div>
         </div>
 
-        <div id="selection-card" class="hidden glass rounded-3xl p-8 text-center animate-in fade-in duration-500">
-            <div class="text-slate-400 text-sm mb-2">当前选择车站</div>
-            <div id="selected-name" class="text-5xl font-black text-white mb-4">---</div>
-            <div id="selected-code" class="inline-block bg-emerald-500 text-slate-900 px-3 py-1 rounded-md font-mono font-bold">CODE</div>
+        <div id="display-card" class="hidden glass rounded-[2rem] p-8 text-center border-t border-white/10 shadow-2xl transition-all">
+            <div id="card-content"></div>
         </div>
     </div>
 
     <script>
-        const API_URL = "https://rail-api.l1quid.dpdns.org"; 
+        const API_URL = "https://train.l1quid.dpdns.org"; // 建议统一用你的自定义域名
 
         async function searchStation() {
-            const query = document.getElementById('station-search').value.toLowerCase();
+            const query = document.getElementById('main-search').value.toLowerCase();
             const resultsDiv = document.getElementById('results');
-            
-            if (query.length < 1) {
-                resultsDiv.classList.add('hidden');
-                return;
-            }
+            if (query.length < 1) { resultsDiv.classList.add('hidden'); return; }
 
             try {
-                // 向你的云端大脑请求数据
-                const response = await fetch(`${API_URL}/api/stations?q=${query}`);
-                const stations = await response.json();
-
-                if (stations.length > 0) {
+                const res = await fetch(`${API_URL}/api/stations?q=${query}`);
+                const data = await res.json();
+                if (data.length > 0) {
                     resultsDiv.classList.remove('hidden');
-                    resultsDiv.innerHTML = stations.map(s => `
-                        <div onclick="selectStation('${s.n}', '${s.c}')" class="p-4 hover:bg-emerald-500 hover:text-slate-900 cursor-pointer border-b border-slate-700 last:border-0 transition-colors">
+                    resultsDiv.innerHTML = data.map(s => `
+                        <div onclick="selectItem('${s.n}', '${s.c}')" class="p-4 hover:bg-emerald-500 hover:text-slate-900 cursor-pointer border-b border-slate-700/50 last:border-0 flex justify-between">
                             <span class="font-bold">${s.n}</span>
-                            <span class="text-xs opacity-60 ml-2">${s.c}</span>
+                            <span class="font-mono text-xs opacity-50">${s.c}</span>
                         </div>
                     `).join('');
-                } else {
-                    resultsDiv.classList.add('hidden');
-                }
-            } catch (e) {
-                console.error("搜索失败", e);
-            }
+                } else { resultsDiv.classList.add('hidden'); }
+            } catch (e) { console.error("API Error"); }
         }
 
-        function selectStation(name, code) {
+        function selectItem(name, code) {
             document.getElementById('results').classList.add('hidden');
-            document.getElementById('selection-card').classList.remove('hidden');
-            document.getElementById('selected-name').innerText = name;
-            document.getElementById('selected-code').innerText = code;
-            document.getElementById('station-search').value = name;
+            const card = document.getElementById('display-card');
+            card.classList.remove('hidden');
+            
+            // 这里预留了实时进度的 UI 结构
+            document.getElementById('card-content').innerHTML = `
+                <div class="text-slate-400 text-xs mb-2 uppercase tracking-widest">Live Tracking</div>
+                <div class="text-6xl font-black text-white mb-6">${name}</div>
+                
+                <div class="relative h-1.5 bg-slate-800 rounded-full mb-8 overflow-hidden">
+                    <div class="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full" style="width: 45%"></div>
+                </div>
+                
+                <div class="flex justify-between items-center">
+                    <span class="bg-emerald-500 text-slate-900 px-4 py-1 rounded-lg font-black text-sm">${code}</span>
+                    <span class="text-emerald-400 text-xs font-mono">正点运行 ●</span>
+                </div>
+            `;
         }
     </script>
 </body>
